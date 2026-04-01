@@ -1,49 +1,19 @@
 #!/bin/sh
 set -e
 
-detect() {
-    if command -v i686-elf-gcc >/dev/null; then
-        CC=i686-elf-gcc; LD=i686-elf-ld; M=cross
-    elif command -v clang >/dev/null; then
-        CC=clang; LD=ld.lld; M=clang
-    else
-        CC=gcc; LD=ld; M=system
-    fi
-    echo "[monolith] $CC ($M)"
-}
+sed -n '/BEGIN_LINKER/,/END_LINKER/p' kernel.c | sed '1d;$d' > linker.ld
+sed -n '/BEGIN_GRUBCFG/,/END_GRUBCFG/p' kernel.c | sed '1d;$d' > grub.cfg
 
-extract() {
-    sed -n '/BEGIN_LINKER/,/END_LINKER/p' kernel.c | sed '1d;$d' > linker.ld
-    sed -n '/BEGIN_GRUBCFG/,/END_GRUBCFG/p' kernel.c | sed '1d;$d' > grub.cfg
-}
+mkdir -p build iso/boot/grub
 
-build() {
-    detect
-    case $M in
-        cross)  $CC -ffreestanding -m32      -c kernel.c -o kernel.o ;;
-        clang)  $CC -target i386-elf -ffreestanding -c kernel.c -o kernel.o ;;
-        system) $CC -m32 -ffreestanding      -c kernel.c -o kernel.o ;;
-    esac
-    case $M in
-        system) $LD -m elf_i386 -T linker.ld -o kernel.elf kernel.o ;;
-        *)      $LD -T linker.ld -o kernel.elf kernel.o ;;
-    esac
-}
+gcc -m32 -ffreestanding -c kernel.c -o build/kernel.o
+ld -m elf_i386 -T linker.ld -o build/kernel.elf build/kernel.o
 
-iso() {
-    mkdir -p iso/boot/grub
-    cp kernel.elf iso/boot/kernel.elf
-    cp grub.cfg   iso/boot/grub/grub.cfg
-    grub-mkrescue -o monolith.iso iso
-}
+cp build/kernel.elf iso/boot/kernel.elf
+cp grub.cfg iso/boot/grub/grub.cfg
 
-run() { qemu-system-i386 -cdrom monolith.iso; }
-clean() { rm -rf iso kernel.o kernel.elf linker.ld grub.cfg monolith.iso; }
+grub-mkrescue -o monolith.iso iso
 
-case "$1" in
-    build) extract; build ;;
-    iso)   extract; build; iso ;;
-    run)   extract; build; iso; run ;;
-    clean) clean ;;
-    *)     extract; build; iso ;;
-esac
+if [ "$1" = "run" ]; then
+    qemu-system-i386 -cdrom monolith.iso
+fi
