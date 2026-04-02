@@ -1,12 +1,43 @@
 #include <stdint.h>
 #include <stddef.h>
+static uint32_t lower = 0;
+static uint32_t upper = 0;
 
 __attribute__((section(".multiboot"), aligned(4), used))
 const uint32_t mb_header[] = {
-    0x1BADB002,
-    0x00000000,
-    -(0x1BADB002 + 0x00000000)
+    0x1BADB002,            // magic
+    0x00000003,            // flags: request mem info + mmap
+    -(0x1BADB002 + 0x00000003)
 };
+
+
+// Multiboot memory map entry
+typedef struct {
+    uint32_t size;
+    uint64_t addr;
+    uint64_t len;
+    uint32_t type;
+} __attribute__((packed)) multiboot_mmap_entry_t;
+
+// Full Multiboot info struct (only fields I care about)
+typedef struct {
+    uint32_t flags;
+    uint32_t mem_lower;
+    uint32_t mem_upper;
+
+    uint32_t boot_device;
+    uint32_t cmdline;
+
+    uint32_t mods_count;
+    uint32_t mods_addr;
+
+    uint32_t syms[4];
+
+    uint32_t mmap_length;
+    uint32_t mmap_addr;
+} __attribute__((packed)) multiboot_info_t;
+
+
 
 static const char* monolith_banner =
 "╔╦╗╔═╗╔╗╔╔═╗╦  ╦╔╦╗╦ ╦\n"
@@ -353,6 +384,21 @@ static void print_uint(unsigned int v) {
     }
 }
 
+// For the ram command, and the ram command only.
+static void print_decimal(uint32_t value, uint32_t scale) {
+
+    uint32_t integer = value / scale;
+    uint32_t frac = ((value % scale) * 1000) / scale;  // 3 decimal places
+
+    print_uint(integer);
+    putch(cursor++, '.', 0x0F);
+
+    // Always print 3 digits, including leading zeros
+    putch(cursor++, '0' + (frac / 100), 0x0F);
+    putch(cursor++, '0' + ((frac / 10) % 10), 0x0F);
+    putch(cursor++, '0' + (frac % 10), 0x0F);
+}
+
 // Handle a shell command
 static void handle_command(const char* cmd) {
     if (typing_mode) {
@@ -389,9 +435,11 @@ static void handle_command(const char* cmd) {
         print_prompt();
         return;
     }
-
+    /* This is the command dispatcher
+       Have fun!
+    */
     if (str_eq(cmd, "help")) {
-        putstr(cursor, "Commands: help clear echo <text> demo type banner", 0x0F);
+        putstr(cursor, "Commands: help clear echo <text> demo type banner ram", 0x0F);
         newline();
     } else if (str_eq(cmd, "clear")) {
         draw_demo();
@@ -411,20 +459,34 @@ static void handle_command(const char* cmd) {
         newline();
         newline();
         print_prompt();
-
         shell_len = 0;
         typing_mode = 1;
         typing_start = pit_ticks;
         return;
+    } else if (str_eq(cmd, "ram")) {
+        uint32_t kb = lower + upper;
+
+        print_uint(kb);
+        putstr(cursor, " KB", 0x0F);
+        newline();
+
+        print_decimal(kb, 1024);
+        putstr(cursor, " MB", 0x0F);
+        newline();
+
+        print_decimal(kb, 1024 * 1024);
+        putstr(cursor, " GB", 0x0F);
+        newline();
+
+        print_prompt();
+        return;
     } else if (str_eq(cmd, "banner")) {
         clear_screen(0x0F);
         print_banner();
-
     } else if (!str_eq(cmd, "")) {
         putstr(cursor, "Unknown command", 0x0F);
         newline();
     }
-
     print_prompt();
 }
 // Keyboard scancode handler
@@ -540,6 +602,17 @@ static void idt_init(void) {
 
 // Kernel entry point
 void kmain(void) {
+    uint32_t magic;
+    uint32_t mb_info_addr;
+
+    __asm__ volatile ("movl %%eax, %0" : "=r"(magic));
+    __asm__ volatile ("movl %%ebx, %0" : "=r"(mb_info_addr));
+
+    multiboot_info_t* mb = (multiboot_info_t*)mb_info_addr;
+
+    lower = mb->mem_lower;
+    upper = mb->mem_upper;
+
     gdt_init();
     idt_init();
     pit_init();
