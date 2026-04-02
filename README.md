@@ -9,3 +9,6 @@ However, the .sh is for convenience.
 The build script uses `sed` to extract those embedded sections into temporary files (`linker.ld` and `grub.cfg`) during the build. These extracted files are generated artifacts, not source, they hold the same weight as .o files.
 
 The actual source of the operating system is still **one file.**
+
+## TODO:
+make an .elf loader to prove a point to a friend.
