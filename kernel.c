@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stddef.h>
+
 static uint32_t lower = 0;
 static uint32_t upper = 0;
 
@@ -24,15 +25,11 @@ typedef struct {
     uint32_t flags;
     uint32_t mem_lower;
     uint32_t mem_upper;
-
     uint32_t boot_device;
     uint32_t cmdline;
-
     uint32_t mods_count;
     uint32_t mods_addr;
-
     uint32_t syms[4];
-
     uint32_t mmap_length;
     uint32_t mmap_addr;
 } __attribute__((packed)) multiboot_info_t;
@@ -71,7 +68,6 @@ END_GRUBCFG */
 hello.txt:Hello from Monolith!
 motd.txt:Welcome to the one-file OS.
 END_INITRD */
-
 
 // GDT structures
 struct gdt_entry {
@@ -119,18 +115,15 @@ static void initrd_parse(uint32_t start, uint32_t end) {
     initrd_file_count = 0;
 
     while ((uint32_t)p < end && initrd_file_count < MAX_INITRD_FILES) {
-
         // filename (NUL-terminated)
         const char* name = p;
-        while ((uint32_t)p < end && *p != '\0')
-            p++;
+        while ((uint32_t)p < end && *p != '\0') p++;
         if ((uint32_t)p >= end) break;
         p++; // skip NUL
 
         // data (NUL-terminated)
         const char* data = p;
-        while ((uint32_t)p < end && *p != '\0')
-            p++;
+        while ((uint32_t)p < end && *p != '\0') p++;
         if ((uint32_t)p >= end) break;
         uint32_t size = p - data;
         p++; // skip NUL
@@ -141,8 +134,6 @@ static void initrd_parse(uint32_t start, uint32_t end) {
         initrd_file_count++;
     }
 }
-
-
 
 // Global descriptor table and pointers
 static struct gdt_entry gdt[3];
@@ -437,7 +428,6 @@ static void print_uint(unsigned int v) {
 
 // For the ram command, and the ram command only.
 static void print_decimal(uint32_t value, uint32_t scale) {
-
     uint32_t integer = value / scale;
     uint32_t frac = ((value % scale) * 1000) / scale;  // 3 decimal places
 
@@ -553,10 +543,10 @@ static void handle_command(const char* cmd) {
             }
         }
 
-    if (!found) {
-        putstr(cursor, "File not found", 0x0F);
-        newline();
-    }
+        if (!found) {
+            putstr(cursor, "File not found", 0x0F);
+            newline();
+        }
 
     } else if (str_eq(cmd, "ls")) {
         clear_screen(0x0F);
@@ -574,16 +564,13 @@ static void handle_command(const char* cmd) {
             newline();
         }
 
-
-    
-
-
     } else if (!str_eq(cmd, "")) {
         putstr(cursor, "Unknown command", 0x0F);
         newline();
     }
     print_prompt();
 }
+
 // Keyboard scancode handler
 void keyboard_handler_c(void) {
     uint8_t sc = inb(0x60);
@@ -749,8 +736,6 @@ void kmain(void) {
             print_uint(initrd_files[0].size);
             newline();
         }
-
-
     }
 
     gdt_init();

@@ -9,7 +9,6 @@ sed -n '/BEGIN_INITRD/,/END_INITRD/p' kernel.c \
     | tr -d '\r' \
     > initrd.txt
 
-
 echo "Building initrd.img"
 rm -f initrd.img
 
@@ -20,7 +19,6 @@ while IFS=: read -r name content; do
     printf "%s" "$content" >> initrd.img
     printf "\0" >> initrd.img
 done < initrd.txt
-
 
 mkdir -p build iso/boot/grub
 
