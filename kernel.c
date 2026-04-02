@@ -8,6 +8,12 @@ const uint32_t mb_header[] = {
     -(0x1BADB002 + 0x00000000)
 };
 
+static const char* monolith_banner =
+"╔╦╗╔═╗╔╗╔╔═╗╦  ╦╔╦╗╦ ╦\n"
+"║║║║ ║║║║║ ║║  ║ ║ ╠═╣\n"
+"╩ ╩╚═╝╝╚╝╚═╝╩═╝╩ ╩ ╩ ╩\n";
+
+
 /* BEGIN_LINKER
 ENTRY(kmain)
 SECTIONS {
@@ -173,6 +179,19 @@ static void newline(void) {
 static void print_prompt(void) {
     putstr(cursor, "$ ", 0x0F);
     cursor += 2;
+}
+
+// Banner
+static void print_banner(void) {
+    for (int i = 0; monolith_banner[i]; i++) {
+        char c = monolith_banner[i];
+        if (c == '\n') {
+            newline();
+        } else {
+            putch(cursor++, c, 0x0F);
+        }
+    }
+    newline();
 }
 
 // Draw the demo screen
@@ -372,7 +391,7 @@ static void handle_command(const char* cmd) {
     }
 
     if (str_eq(cmd, "help")) {
-        putstr(cursor, "Commands: help clear echo <text> demo type", 0x0F);
+        putstr(cursor, "Commands: help clear echo <text> demo type banner", 0x0F);
         newline();
     } else if (str_eq(cmd, "clear")) {
         draw_demo();
@@ -397,6 +416,10 @@ static void handle_command(const char* cmd) {
         typing_mode = 1;
         typing_start = pit_ticks;
         return;
+    } else if (str_eq(cmd, "banner")) {
+        clear_screen(0x0F);
+        print_banner();
+
     } else if (!str_eq(cmd, "")) {
         putstr(cursor, "Unknown command", 0x0F);
         newline();
@@ -404,7 +427,6 @@ static void handle_command(const char* cmd) {
 
     print_prompt();
 }
-
 // Keyboard scancode handler
 void keyboard_handler_c(void) {
     uint8_t sc = inb(0x60);
