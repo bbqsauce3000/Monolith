@@ -37,13 +37,17 @@ typedef struct {
     uint32_t mmap_addr;
 } __attribute__((packed)) multiboot_info_t;
 
-
+typedef struct {
+    uint32_t mod_start;
+    uint32_t mod_end;
+    uint32_t string;
+    uint32_t reserved;
+} __attribute__((packed)) multiboot_module_t;
 
 static const char* monolith_banner =
 "╔╦╗╔═╗╔╗╔╔═╗╦  ╦╔╦╗╦ ╦\n"
 "║║║║ ║║║║║ ║║  ║ ║ ╠═╣\n"
 "╩ ╩╚═╝╝╚╝╚═╝╩═╝╩ ╩ ╩ ╩\n";
-
 
 /* BEGIN_LINKER
 ENTRY(kmain)
@@ -59,8 +63,15 @@ set timeout=0
 set default=0
 menuentry "Monolith" {
     multiboot /boot/kernel.elf
+    module  /boot/initrd.img
 }
 END_GRUBCFG */
+
+/* BEGIN_INITRD
+hello.txt:Hello from Monolith!
+motd.txt:Welcome to the one-file OS.
+END_INITRD */
+
 
 // GDT structures
 struct gdt_entry {
@@ -92,6 +103,46 @@ struct idt_ptr {
     uint16_t limit;
     uint32_t base;
 } __attribute__((packed));
+
+typedef struct {
+    const char* name;
+    const char* data;
+    uint32_t size;
+} initrd_file_t;
+
+#define MAX_INITRD_FILES 32
+static initrd_file_t initrd_files[MAX_INITRD_FILES];
+static int initrd_file_count = 0;
+
+static void initrd_parse(uint32_t start, uint32_t end) {
+    const char* p = (const char*)start;
+    initrd_file_count = 0;
+
+    while ((uint32_t)p < end && initrd_file_count < MAX_INITRD_FILES) {
+
+        // filename (NUL-terminated)
+        const char* name = p;
+        while ((uint32_t)p < end && *p != '\0')
+            p++;
+        if ((uint32_t)p >= end) break;
+        p++; // skip NUL
+
+        // data (NUL-terminated)
+        const char* data = p;
+        while ((uint32_t)p < end && *p != '\0')
+            p++;
+        if ((uint32_t)p >= end) break;
+        uint32_t size = p - data;
+        p++; // skip NUL
+
+        initrd_files[initrd_file_count].name = name;
+        initrd_files[initrd_file_count].data = data;
+        initrd_files[initrd_file_count].size = size;
+        initrd_file_count++;
+    }
+}
+
+
 
 // Global descriptor table and pointers
 static struct gdt_entry gdt[3];
@@ -483,6 +534,50 @@ static void handle_command(const char* cmd) {
     } else if (str_eq(cmd, "banner")) {
         clear_screen(0x0F);
         print_banner();
+    } else if (str_startswith(cmd, "cat ")) {
+        const char* target = cmd + 4;
+
+        int found = 0;
+        for (int i = 0; i < initrd_file_count; i++) {
+            if (str_eq(target, initrd_files[i].name)) {
+                found = 1;
+                for (uint32_t j = 0; j < initrd_files[i].size; j++) {
+                    putch(cursor++, initrd_files[i].data[j], 0x0F);
+                    if (cursor >= 80 * 25) {
+                        scroll_up();
+                        cursor = 24 * 80;
+                    }
+                }
+                newline();
+                break;
+            }
+        }
+
+    if (!found) {
+        putstr(cursor, "File not found", 0x0F);
+        newline();
+    }
+
+    } else if (str_eq(cmd, "ls")) {
+        clear_screen(0x0F);
+        cursor = 0;
+
+        newline();
+
+        for (int i = 0; i < initrd_file_count; i++) {
+
+            // force left edge
+            if (cursor % 80 != 0)
+                cursor = (cursor / 80 + 1) * 80;
+
+            putstr(cursor, initrd_files[i].name, 0x0F);
+            newline();
+        }
+
+
+    
+
+
     } else if (!str_eq(cmd, "")) {
         putstr(cursor, "Unknown command", 0x0F);
         newline();
@@ -612,6 +707,51 @@ void kmain(void) {
 
     lower = mb->mem_lower;
     upper = mb->mem_upper;
+
+    uint32_t initrd_start = 0;
+    uint32_t initrd_end   = 0;
+
+    if (mb->mods_count > 0) {
+        multiboot_module_t* mods = (multiboot_module_t*)mb->mods_addr;
+        initrd_start = mods[0].mod_start;
+        initrd_end   = mods[0].mod_end;
+
+        putstr(cursor, "Initrd loaded at: ", 0x0F);
+        print_uint(initrd_start);
+        newline();
+
+        putstr(cursor, "Initrd size: ", 0x0F);
+        print_uint(initrd_end - initrd_start);
+        putstr(cursor, " bytes", 0x0F);
+        newline();
+
+        initrd_parse(initrd_start, initrd_end);
+        // DEBUG: dump first 128 bytes of initrd
+        putstr(cursor, "INITRD HEX DUMP:", 0x0F);
+        newline();
+        for (uint32_t i = 0; i < 128 && initrd_start + i < initrd_end; i++) {
+            uint8_t b = ((uint8_t*)initrd_start)[i];
+            const char* h = "0123456789ABCDEF";
+            putch(cursor++, h[b >> 4], 0x0F);
+            putch(cursor++, h[b & 0xF], 0x0F);
+            putch(cursor++, ' ', 0x0F);
+            if ((i % 16) == 15) newline();
+        }
+        newline();
+
+        putstr(cursor, "Files parsed: ", 0x0F);
+        print_uint(initrd_file_count);
+        newline();
+        if (initrd_file_count > 0) {
+            putstr(cursor, "First file: '", 0x0F);
+            putstr(cursor, initrd_files[0].name, 0x0F);
+            putstr(cursor, "' size=", 0x0F);
+            print_uint(initrd_files[0].size);
+            newline();
+        }
+
+
+    }
 
     gdt_init();
     idt_init();
