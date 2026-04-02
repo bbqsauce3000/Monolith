@@ -490,7 +490,7 @@ static void handle_command(const char* cmd) {
        Have fun!
     */
     if (str_eq(cmd, "help")) {
-        putstr(cursor, "Commands: help clear echo <text> demo type banner ram", 0x0F);
+        putstr(cursor, "Commands: help clear echo <text> demo type banner ram ls cat", 0x0F);
         newline();
     } else if (str_eq(cmd, "clear")) {
         draw_demo();
