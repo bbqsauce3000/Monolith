@@ -53,3 +53,8 @@ dkms.conf
 
 # debug information files
 *.dwo
+*.cfg
+initrd.img
+initrd.txt
+linker.ld
+*.iso
